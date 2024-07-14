@@ -7,15 +7,14 @@ int main() {
 
 
     sf::RenderWindow window(sf::VideoMode(800, 700), "Mines");
+    sf::Font font;
+    font.loadFromFile("../assets/Hack-Bold.ttf");
 
-    
-    th::DrawableItemsManager manager;
+    th::game_state state = th::game_state::in_game;
+    th::DrawableItemsManager manager(window, state, font);
 
-    th::MineFiled mine_field(window);
+    th::MineFiled mine_field(window, state, font);
 
-    manager.push_front(&mine_field);
-    
-    
     while (window.isOpen()) {
 
 
@@ -31,7 +30,7 @@ int main() {
         window.clear();
         //
 
-        mine_field.draw();
+        manager.draw_items();
 
         //
         window.display();

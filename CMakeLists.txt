@@ -1,5 +1,6 @@
 set(PROJECT_NAME mines)
 set(SFML_DIR /usr/local/lib/SFML-2.6.1/lib/cmake/SFML)
+set(SFML_STATIC_LIBRARIES TRUE)
 
 project(${PROJECT_NAME})
 

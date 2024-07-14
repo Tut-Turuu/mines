@@ -29,6 +29,11 @@ namespace th {
         return res;
     }
 
+    enum class game_state {
+        loose,
+        win,
+        in_game
+    };
 
     class Drawable {
 
@@ -36,7 +41,7 @@ namespace th {
 
         virtual void draw() = 0;
 
-        virtual void process_event(const sf::Event& event) = 0;
+        virtual game_state process_event(const sf::Event& event) = 0;
     };
 
     struct Tile {
@@ -85,7 +90,8 @@ namespace th {
         std::vector<std::vector<Tile>> field;
         std::unordered_map<std::string, sf::Texture> textures;
         int flags_placed = 0;
-        sf::Font font;
+        sf::Font& font;
+        game_state& state;
         // sf::SoundBuffer sound_buff;
 
         void discover(int n) {
@@ -189,7 +195,8 @@ namespace th {
         }
 
         void loose() {
-           for (auto& i : field) {
+            state = game_state::loose;
+            for (auto& i : field) {
                 for (auto& j : i) {
                     if (j.is_mine) {
                         j.is_discovered = true;
@@ -200,6 +207,7 @@ namespace th {
         }
 
         void win() {
+            state = game_state::win;
             for (auto& i : field) {
                 for (auto& j : i) {
                     if (j.is_mine) {
@@ -213,23 +221,10 @@ namespace th {
             std::cout << "Congratulations\n";            
         }
 
-        void refresh_field() {
-            mines_generated = false;
-            flags_placed = 0;
-
-            for (auto& i: field) {
-                for (auto& j : i) {
-                    j.flag = false;
-                    j.is_mine = false;
-                    j.mines_around = 0;
-                    j.is_discovered = false;
-                }
-            }
-        }
 
     public:
 
-        MineFiled(sf::RenderWindow& window): window(window) {
+        MineFiled(sf::RenderWindow& window, game_state& state, sf::Font& font): window(window), state(state), font(font) {
             field.resize(field_y);
             for (auto& i : field) {
                 i.resize(field_x);
@@ -293,7 +288,7 @@ namespace th {
             window.draw(text);
         }
 
-        void process_event(const sf::Event& event) override {
+        game_state process_event(const sf::Event& event) override {
             switch (event.type){
                 case sf::Event::MouseButtonPressed:
                     if (event.mouseButton.button == sf::Mouse::Left) {
@@ -313,65 +308,125 @@ namespace th {
                             break;
                     }
             }
+            return state;
+        }
+
+        void refresh_field() {
+            mines_generated = false;
+            flags_placed = 0;
+            state = game_state::in_game;
+
+            for (auto& i: field) {
+                for (auto& j : i) {
+                    j.flag = false;
+                    j.is_mine = false;
+                    j.mines_around = 0;
+                    j.is_discovered = false;
+                }
+            }
         }
     };
 
     class Button : public Drawable {
 
+        game_state& state;
         sf::RenderWindow& window;
         sf::RectangleShape outer;
         sf::Text text;
-
+        sf::Vector2f position = {300, 300};
+        sf::Vector2f scale = {90, 40};
     public:
 
-        Button(sf::RenderWindow& window): window(window) {}
-
-        void draw() override {
-            
+        Button(sf::RenderWindow& window, sf::Font& font, game_state& state): window(window), state(state) {
+            text.setString("Retry");
+            text.setFont(font);
+            text.setPosition(position);
+            outer.setPosition(position);
+            outer.setSize(scale);
+            outer.setFillColor(sf::Color(200, 200, 200));
         }
 
-        void process_event(const sf::Event& event) override {
+        void draw() override {
+            window.draw(outer);
+            window.draw(text);
+        }
 
+        game_state process_event(const sf::Event& event) override {
+            if (event.type == sf::Event::MouseButtonPressed) {
+                if (event.mouseButton.button == sf::Mouse::Left) {
+                    if (event.mouseButton.x >= position.x && event.mouseButton.x <= (position.x + scale.x) && event.mouseButton.y >= position.y && event.mouseButton.y <= (position.y + scale.y)) {
+                        return game_state::in_game;
+                    }
+                }
+            }
+            return state;
         }
     };
 
-    class LooseMenu : public Drawable {
+    class Menu : public Drawable {
         sf::RenderWindow& window;
+        sf::RectangleShape outer;
+        sf::Text text;
+        sf::Vector2f position = {170, 200};
+        sf::Vector2f scale = {350, 200};
         Button retry_button;
+        game_state& state;
     
     public:
-        LooseMenu(sf::RenderWindow& window): window(window), retry_button(window) {}
+        Menu(sf::RenderWindow& window, game_state& state, sf::Font& font): window(window), retry_button(window, font, state), state(state) {
+            text.setFont(font);
+            text.setPosition({position.x + 30, position.y + 30});
+            outer.setPosition(position);
+            outer.setSize(scale);
 
-        void draw() override {
-            
         }
 
-        void process_event(const sf::Event& event) override {
+        void draw() override {
+            if (state == game_state::loose) {
+                text.setString("Try again :(");
+                outer.setFillColor(sf::Color(200, 150, 150));
+            } else {
+                text.setString("Congartulations!!");
+                outer.setFillColor(sf::Color(150, 200, 150));    
+            }
+            window.draw(outer);
+            window.draw(text);
+            retry_button.draw();
+        }
 
+        game_state process_event(const sf::Event& event) override {
+            return retry_button.process_event(event);
         }
 
     };
+
+
 
     class DrawableItemsManager {
         
-        std::list<Drawable*> items;
+        MineFiled mine_field;
+        Menu menu;
+        game_state& state;
 
     public:
 
-        void push_front(Drawable* item) {
-            items.push_front(item);
-        }
-        void pop_front() {
-            items.pop_front();
-        }
+        DrawableItemsManager(sf::RenderWindow& window, game_state& state, sf::Font& font): mine_field(window, state, font), menu(window, state, font), state(state) {}
 
         void distibute_event(sf::Event& event) {
-            (*items.begin())->process_event(event);
+            if (state == game_state::in_game) {
+                state = mine_field.process_event(event);
+            } else {
+                state = menu.process_event(event);
+                if (state == game_state::in_game) {
+                    mine_field.refresh_field();
+                }
+            }
         }
 
         void draw_items() {
-            for (auto& i : items) {
-                i->draw();
+            mine_field.draw();
+            if (state != game_state::in_game) {
+                menu.draw();
             }
         }
 
